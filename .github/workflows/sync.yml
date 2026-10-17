@@ -24,6 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The branch tip, not the commit that triggered the run: a queued run must build on
+          # top of the data commit the previous run just pushed.
+          ref: ${{ github.ref_name }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -38,7 +42,9 @@ jobs:
             echo "No data changes."
           else
             git commit -m "data: sync $(date -u +'%Y-%m-%d %H:%M UTC')"
-            git pull --rebase origin "${GITHUB_REF_NAME}"
+            # If something was pushed meanwhile, replay our commit on top; on a conflict in data/
+            # the freshly fetched data wins ("theirs" is our commit while rebasing).
+            git pull --rebase -X theirs origin "${GITHUB_REF_NAME}"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
       - name: Show sync status
