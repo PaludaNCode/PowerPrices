@@ -1,5 +1,10 @@
 # PowerPrices – Danish electricity prices, today, tomorrow and a few days ahead
 
+> **Status: parked.** [elpriser.org](https://elpriser.org/) already delivers exactly what this
+> site set out to do, so the automatic sync and deployment are switched off. Everything is kept
+> working: run *Actions → "Sync data and deploy site" → Run workflow* for a one-off refresh, or
+> restore the `schedule`/`push` triggers in `.github/workflows/sync.yml` to turn it back on.
+
 A small static website hosted on **GitHub Pages**, kept up to date by a **GitHub Actions job**
 that runs a few times a day. It shows the Danish day-ahead ("spot") electricity price for
 **DK1 (West)** and **DK2 (East)**, optionally with grid tariffs, Energinet tariffs, electricity
