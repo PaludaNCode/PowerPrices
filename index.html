@@ -16,8 +16,9 @@
       <h1>Elpriser i Danmark</h1>
       <div class="tag">Spotpris (day-ahead) for DK1 · Vestdanmark og DK2 · Østdanmark – i dag, i morgen og et kig længere frem</div>
     </div>
-    <div class="tag" id="clock"></div>
+    <div class="tag" id="sync-status">Henter data…</div>
   </header>
+  <div id="global-notice"></div>
 
   <!-- ====================== I DAG OG I MORGEN ====================== -->
   <section class="card" id="prices-card">
@@ -43,27 +44,15 @@
 
   <!-- ====================== UDSIGT ====================== -->
   <section class="card" id="outlook-card">
-    <h2>Udsigt 2–7 dage frem <span class="sub">eksperiment: et vejrbaseret gæt – ikke en officiel pris</span></h2>
-    <p class="muted">Morgendagens pris kendes først kl. ca. 13:00, og ingen kender priserne længere frem. Men prisniveauet de næste dage afhænger først og fremmest af <strong>vind og sol</strong>, og dem kan vejrmodellerne forudsige nogenlunde 3–5 dage frem. Modellen her lærer sammenhængen mellem vejr og pris af de seneste 6 ugers faktiske priser og anvender den på vejrudsigten.</p>
-    <div id="outlook-notice"><span class="skeleton">Henter 6 ugers prishistorik og vejrudsigt…</span></div>
+    <h2>Udsigt 2–7 dage frem <span class="sub">offentlig prognose fra elpriser.org – ikke en officiel pris</span></h2>
+    <p class="muted">Morgendagens pris kendes først kl. ca. 13:00, og ingen kender priserne længere frem. Men prisniveauet de næste dage afhænger først og fremmest af <strong>vind og sol</strong>, som vejrmodellerne kan forudsige nogenlunde 3–5 dage frem. <a href="https://elpriser.org/prognose" rel="noopener">elpriser.org</a> kører en maskinlæringsmodel (LightGBM) på vejrudsigter, kalender og de seneste priser og genoptræner den dagligt. Siden her henter prognosen nogle gange om dagen, gemmer hver dags udgave og måler bagefter, hvor godt den ramte.</p>
+    <div id="outlook-notice"></div>
     <div class="chart-wrap"><canvas id="outlook-chart" aria-label="Prisudsigt" role="img"></canvas></div>
-    <div class="legend-note">Fuldt optrukket = kendte day-ahead-priser. Grå stiplet = modellens gæt for de seneste 7 dage (lavet uden at kende priserne, så du kan se hvor godt den rammer). Grøn = modellens gæt frem i tiden med et vejledende usikkerhedsbånd. Lilla prikket = ekstern prognose fra elpriser.org, hvis tilgængelig.</div>
+    <div class="legend-note">Fuldt optrukket = kendte day-ahead-priser (seneste 7 dage, i dag og i morgen). Stiplet = prognose for de følgende dage.</div>
     <div class="table-scroll"><table id="outlook-table"></table></div>
-    <details>
-      <summary>Hvor godt rammer modellen? (test på de seneste 7 dage)</summary>
-      <div id="outlook-eval" class="prose"></div>
-    </details>
-    <details>
-      <summary>Sådan virker modellen</summary>
-      <div class="prose">
-        <ul>
-          <li><strong>Vejrdata:</strong> timeprognoser for vindhastighed i 100 m højde, solindstråling og temperatur fra <a href="https://open-meteo.com/" rel="noopener">Open-Meteo</a> for 17 punkter i Jylland/Fyn, på Sjælland/øerne, til havs (Horns Rev, Anholt, Kriegers Flak, Rødsand) og i Nordtyskland. Vindhastighed omregnes til en typisk kapacitetsfaktor for vindmøller.</li>
-          <li><strong>Træning:</strong> de seneste 42 dages faktiske day-ahead-priser (Energi Data Service) kobles time for time med vejret. Modellen er en ridge-regression med knæk-led for vind (så prisen falder stejlt når det blæser meget) kombineret 50/50 med et "analoge timer"-gæt (gennemsnittet af de 12 mest vejr- og tidsmæssigt lignende timer i træningsperioden). Timeprofil, weekend/helligdag og temperatur indgår.</li>
-          <li><strong>Hvorfor kun 6 uger?</strong> Gas- og CO2-priser, vandmagasiner og revisioner på kabler og kraftværker flytter prisniveauet, men de ændrer sig langsomt. Ved kun at træne på de seneste uger "arver" modellen det aktuelle niveau uden at skulle kende dem.</li>
-          <li><strong>Usikkerhed:</strong> båndet er modellens fejlspredning på de seneste 7 dage, forstørret 15 % pr. dag længere frem, fordi vejrudsigten selv bliver mere usikker. Det er vejledende, ikke statistisk garanteret.</li>
-          <li><strong>Hvad den ikke kan:</strong> udfald på kabler og kraftværker, pludselige gasprisspring, ekstreme prisspidser og flaskehalse mellem DK1 og DK2. En rigtig backtest med vejrudsigter udsendt 1–5 dage i forvejen ligger i repoets <code>analysis/backtest.py</code>.</li>
-        </ul>
-      </div>
+    <details open>
+      <summary>Hvor godt rammer prognosen?</summary>
+      <div id="outlook-skill" class="prose"></div>
     </details>
   </section>
 
@@ -96,7 +85,7 @@
       <li><strong>Man kan ikke ramme:</strong> den præcise pris i den enkelte time, prisspidser når Tyskland mangler strøm, og konsekvenser af pludselige udfald.</li>
       <li><strong>Jo længere frem, jo værre:</strong> fejlen vokser dag for dag, og 6–7 dage frem er gættet ikke meget bedre end "som sidste uge".</li>
     </ul>
-    <p>Andre har bygget det samme med mere avancerede modeller, så vi behøver ikke starte fra nul: <a href="https://elpriser.org/prognose" rel="noopener">elpriser.org</a> (gratis, LightGBM-model, 7–9 dage, genoptrænes dagligt – vises ovenfor som sammenligning), <a href="https://www.carnot.dk/" rel="noopener">Carnot.dk</a> (5 dage, kræver API-nøgle), <a href="https://energypriceforecast.eu/" rel="noopener">energypriceforecast.eu</a> (5 dage) og elhandlernes ugentlige markedskommentarer (fx Energi Danmarks "Fokus"). Fælles for dem alle: de bygger på vejrprognoser for vind og sol i Danmark og nabolandene plus kalender og de seneste priser.</p>
+    <p>Flere har bygget prognoser på netop det grundlag, så siden her laver ikke sin egen: <a href="https://elpriser.org/prognose" rel="noopener">elpriser.org</a> (gratis, åben LightGBM-model, 7–9 dage, genoptrænes dagligt – det er den, der vises ovenfor), <a href="https://www.carnot.dk/" rel="noopener">Carnot.dk</a> (5 dage, kræver API-nøgle), <a href="https://energypriceforecast.eu/" rel="noopener">energypriceforecast.eu</a> (5 dage) og elhandlernes ugentlige markedskommentarer (fx Energi Danmarks "Fokus"). Fælles for dem alle: de bygger på vejrprognoser for vind og sol i Danmark og nabolandene plus kalender og de seneste priser. Hvor meget de rammer ved siden af, måler siden selv dag for dag i afsnittet "Hvor godt rammer prognosen?".</p>
 
     <h3>Hvad betaler man egentlig pr. kWh?</h3>
     <p>Spotprisen er kun en del af regningen. For en husstand i 2026 består prisen af: <strong>spotpris</strong> (varierer time for time) + <strong>elhandlerens tillæg</strong> (fx Norlys FlexEl) + <strong>netselskabets nettarif</strong> (tidsdifferentieret: lav om natten, høj om dagen, spidsbelastning kl. 17–21, højest om vinteren) + <strong>Energinets tariffer</strong> (transmissionsnet- og systemtarif, i 2026 ca. 11,5 øre/kWh i alt) + <strong>elafgift</strong> (midlertidigt nedsat til 0,8 øre/kWh i 2026 og 2027 mod normalt ca. 72,7 øre/kWh) – og oveni 25 % moms. Slå "inkl. tariffer, afgift og moms" til øverst og vælg dit netselskab for at se det samlede beløb; tarifferne hentes live fra Energinets DataHub-prisliste.</p>
@@ -106,11 +95,10 @@
     <strong>Datakilder</strong>
     <ul>
       <li><a href="https://www.energidataservice.dk/tso-electricity/DayAheadPrices" rel="noopener">Energi Data Service – DayAheadPrices</a> (Energinet, CC BY 4.0): day-ahead-priser i 15-minutters opløsning. <a href="https://www.energidataservice.dk/tso-electricity/DatahubPricelist" rel="noopener">DatahubPricelist</a>: tariffer og afgifter.</li>
-      <li><a href="https://open-meteo.com/" rel="noopener">Open-Meteo</a> (CC BY 4.0): vejrprognoser.</li>
-      <li><a href="https://elpriser.org/" rel="noopener">elpriser.org</a>: ekstern prognose og reserve-kilde for priser, hvis Energi Data Service ikke kan nås fra browseren.</li>
+      <li><a href="https://elpriser.org/" rel="noopener">elpriser.org</a>: prognosen 2–7 dage frem (gratis, offentlig API uden garanti for oppetid).</li>
       <li><a href="https://www.nordpoolgroup.com/" rel="noopener">Nord Pool</a>: day-ahead-markedet, hvor priserne fastsættes.</li>
     </ul>
-    <p>Siden er statisk og henter alt direkte i din browser; intet gemmes på en server. Prognosen er et eksperiment og ingen garanti. Tjek altid din egen elaftale for tillæg og abonnementer.</p>
+    <p>Siden er statisk og hostes på GitHub Pages. Et GitHub Actions-job henter data fra kilderne nogle gange om dagen (bl.a. kl. ca. 13:20, når morgendagens priser er klar) og gemmer dem som JSON i repoet; din browser henter kun de filer. Prognosen er vejledende og ingen garanti. Tjek altid din egen elaftale for tillæg og abonnementer.</p>
   </footer>
 </div>
 <script type="module" src="js/app.js"></script>

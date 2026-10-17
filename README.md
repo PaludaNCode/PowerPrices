@@ -1,171 +1,145 @@
 # PowerPrices – Danish electricity prices, today, tomorrow and a few days ahead
 
-A small static website (plain HTML/CSS/JS, no build step, no server) that shows the Danish
-day-ahead ("spot") electricity price for **DK1 (West)** and **DK2 (East)**, optionally with
-grid tariffs, Energinet tariffs, electricity tax and VAT added, plus an **experimental
-weather-based outlook 2–7 days ahead** – together with an investigation of *how* the price is
-set and *whether* it can be guessed several days ahead.
+A small static website hosted on **GitHub Pages**, kept up to date by a **GitHub Actions job**
+that runs a few times a day. It shows the Danish day-ahead ("spot") electricity price for
+**DK1 (West)** and **DK2 (East)**, optionally with grid tariffs, Energinet tariffs, electricity
+tax and VAT added, and a **2–7 day outlook** taken from elpriser.org's public forecast. Every
+day's forecast is archived in the repo, and the site measures how well the forecast actually hit.
 
 The site's UI is in Danish. This README is in English.
 
-## Contents
+## How it works
+
+```
+GitHub Actions (cron, 6×/day)            GitHub Pages (static)            Browser
+┌──────────────────────────────┐   ┌──────────────────────────┐   ┌─────────────────────┐
+│ scripts/sync.py              │   │ index.html, js/, css/    │   │ reads data/*.json   │
+│  • Energi Data Service       │──▶│ data/prices.json         │──▶│ renders charts,     │
+│    DayAheadPrices (15 min)   │   │ data/tariffs.json        │   │ "now", cheapest     │
+│    DatahubPricelist (tariffs)│   │ data/forecast.json       │   │ hours, outlook,     │
+│  • elpriser.org forecast     │   │ data/skill.json          │   │ forecast track      │
+│  • scores archived forecasts │   │ data/history/...         │   │ record              │
+└──────────────────────────────┘   └──────────────────────────┘   └─────────────────────┘
+```
+
+* The browser never calls an external API, so CORS, rate limits and API outages do not affect
+  visitors; at worst the page shows data from the last successful sync, with its timestamp.
+* The sync commits `data/` back to the branch only when something changed (roughly 1–3 commits a
+  day) and then deploys the repository root to GitHub Pages.
+* Tomorrow's prices are published around 13:00 Danish time, so the schedule runs at 11:20, 12:20
+  and 13:20 UTC (covers summer and winter time, with retries), plus 04:20, 15:20 and 19:20 UTC
+  for forecast refreshes. GitHub's cron can be a few minutes late; the page shows the sync time.
 
 | Path | What |
 |---|---|
-| `index.html`, `css/style.css` | The page and its styling (light/dark, mobile friendly) |
-| `js/api.js` | Data access: Energi Data Service, elpriser.org (fallback), Open-Meteo |
-| `js/tariffs.js` | Grid-company table (GLN + charge codes), Energinet charges, Danish holidays, time-zone helpers |
-| `js/model.js` | The in-browser price model (ridge regression + nearest-neighbour blend) |
-| `js/app.js` | UI wiring, charts (Chart.js from cdnjs) |
-| `analysis/backtest.py` | A proper backtest of 2–7-day-ahead forecasting skill using archived weather forecasts |
+| `index.html`, `css/style.css` | The page (light/dark, mobile friendly) |
+| `js/app.js` | Rendering from the JSON files; Chart.js is loaded from cdnjs |
+| `js/tariffs.js` | Price composition helpers, Danish holidays, time-zone helpers |
+| `config/grid-companies.json` | Grid companies (netselskaber): GLN + DatahubPricelist charge codes |
+| `scripts/sync.py` | The sync job (standard library only) |
+| `.github/workflows/sync.yml` | Schedule, commit of `data/`, Pages deployment |
+| `test/page_test.mjs` | Offline browser test with synthetic data |
+| `data/` | Written by the sync job (do not edit by hand) |
 
-## Running it
+## Setup
 
-It is a static site. Either open `index.html` directly in a browser, or serve the folder:
+1. **Pages:** repository *Settings → Pages → Build and deployment → Source: GitHub Actions*.
+   (GitHub Pages on a private repository requires a paid plan; public repositories are free.)
+2. **Default branch:** scheduled workflows only run on the default branch. Merge this branch
+   into `main`/`master` (or make it the default) so the cron fires.
+3. **First run:** *Actions → "Sync data and deploy site" → Run workflow*. It fetches the data,
+   commits `data/`, and deploys the site. Check `data/meta.json` (also printed in the job log)
+   for what succeeded.
 
-```bash
-python3 -m http.server 8000     # then open http://localhost:8000/
-```
+Run the sync locally with `python3 scripts/sync.py` (writes to `data/`), or `--mock` for
+synthetic data without network access.
 
-To publish, enable **GitHub Pages** for the repository (Settings → Pages → Deploy from a branch,
-branch `main`/`master`, folder `/ (root)`). No build step is needed.
+## Data files
 
-All data is fetched by the browser directly from public, keyless APIs:
-
-* **Energi Data Service** (Energinet, CC BY 4.0) – `DayAheadPrices` (15-minute day-ahead prices,
-  replaced `Elspotprices` on 1 Oct 2025) and `DatahubPricelist` (tariffs and taxes).
-* **Open-Meteo** (CC BY 4.0) – hourly wind (100 m), solar radiation and temperature forecasts for
-  17 points in Denmark, offshore and northern Germany.
-* **elpriser.org** – used as a fallback source for prices if Energi Data Service cannot be reached
-  from the browser, and to overlay its own 7-day forecast as an external comparison.
-
-Settings (price area, grid company, markup) are kept in `localStorage` only.
+* `data/prices.json` – hourly means of the 15-minute day-ahead prices (DKK/MWh), last 14 days,
+  today and tomorrow once published (`has_tomorrow`).
+* `data/tariffs.json` – current/future `DatahubPricelist` rows for Energinet (codes 40000, 41000,
+  EA-001) and for every grid company in `config/grid-companies.json`.
+* `data/forecast.json` – elpriser.org's forecast (spot ex VAT, converted to DKK/MWh, UTC hours),
+  with `kind` = `actual` for days already published and `forecast` otherwise.
+* `data/history/prices/YYYY-MM-DD.json` – archive of actual prices, one file per day.
+* `data/history/forecasts/YYYY-MM-DD.json` – the forecast as of that day (last sync of the day).
+* `data/skill.json` – forecast vs. actual, per area and lead time (days after the forecast day):
+  hourly MAE, daily-mean MAE, bias and how often the forecast got the direction right relative
+  to the previous week. It fills up as days pass.
+* `data/meta.json` – sync time, which steps succeeded, errors.
 
 ## How the price is set (the short version)
 
 1. The spot price shown by Norlys ("FlexEl") and everyone else is the result of the **day-ahead
-   auction** on Nord Pool, which is coupled with the other European exchanges (EPEX etc.) in the
-   single day-ahead coupling (SDAC).
+   auction** on Nord Pool, coupled with the other European exchanges (EPEX etc.) in the single
+   day-ahead coupling (SDAC).
 2. Every day before **12:00 CET** (gate closure) producers, large consumers and traders submit
-   buy/sell orders for each of the 96 quarter-hours of the **following day** (15-minute
-   resolution since 1 October 2025; hourly before).
-3. The coupling algorithm (Euphemia) finds, for each quarter-hour and each bidding zone, the
-   price where supply meets demand, subject to the capacity of the interconnectors.
-4. Results are published around **12:45–13:00 CET**. That is why nobody can show the day after
-   tomorrow: that auction has not run yet.
+   orders for each of the 96 quarter-hours of the **following day** (15-minute resolution since
+   1 October 2025; hourly before).
+3. The coupling algorithm (Euphemia) finds, per quarter-hour and bidding zone, the price where
+   supply meets demand, subject to interconnector capacity.
+4. Results are published around **12:45–13:00 CET**. Nobody can show the day after tomorrow,
+   because that auction has not run yet.
 
 The price is a **marginal price**: every producer that runs gets the price of the most expensive
 unit needed to cover demand ("merit order"). Wind, solar and nuclear bid close to zero, hydro bids
-the value of saving its water, coal and gas plants bid fuel + CO₂ costs and sit at the top. Lots of
-wind → cheap (sometimes negative) prices; no wind → gas plants, often in Germany, set the price.
+the value of saving its water, coal and gas plants bid fuel + CO₂ and sit at the top. Lots of wind
+→ cheap (sometimes negative) prices; no wind → gas plants, often in Germany, set the price.
 
 Denmark has two zones, DK1 (Jutland/Funen) and DK2 (Zealand and the islands east of the Great
 Belt), both coupled to Germany, Norway, Sweden, the Netherlands and Great Britain. When the cables
 are not congested, DK1 usually follows the German price and DK2 the south-Swedish (SE4) price.
 
-### What drives the level
-
 | Driver | Time scale | Forecastable 2–5 days out? |
 |---|---|---|
 | Wind in DK and northern Germany | hours–days | Yes, reasonably (weather models) |
 | Solar | hours–days, seasonal | Yes |
-| Demand (hour of day, weekday/holiday, temperature) | hours–days | Yes (calendar + temperature forecast) |
+| Demand (hour, weekday/holiday, temperature) | hours–days | Yes |
 | Gas (TTF) and CO₂ (EUA) prices | weeks–months | Assume unchanged |
 | Nordic hydro reservoir levels | weeks–months | Assume unchanged |
-| Interconnector / plant outages (UMMs) | sudden | No (unless pre-announced) |
+| Interconnector / plant outages | sudden | No (unless pre-announced) |
 
 ### What you pay per kWh (2026)
 
 `(spot + grid tariff + Energinet transmission & system tariff + elafgift) × 1.25 VAT + supplier markup`
 
 * Grid tariff: time-differentiated per grid company (low at night, high by day, peak 17–21,
-  highest in winter). Fetched live from `DatahubPricelist`; see the GLN/charge-code table in
-  `js/tariffs.js` (adapted from the MTrab/energidataservice Home Assistant integration).
+  highest in winter). Taken from `DatahubPricelist`.
 * Energinet consumer tariffs: ~11.5 øre/kWh in total in 2026 (after Energinet's tariff cap).
 * Elafgift: temporarily cut to **0.8 øre/kWh for 2026–2027** (normally ~72.7 øre/kWh).
 
 ## Can you guess prices 2–5 days ahead?
 
 **Partly, yes.** The slow drivers (gas, CO₂, hydro, outages) can be assumed constant a few days
-out, so the question is mostly the weather forecast. Wind forecasts are good 1–3 days ahead and
-useful up to 5–6 days; beyond that it is statistics.
+out, so the question is mostly the weather forecast, which is useful up to about 5 days. You can
+expect to get the level of a day (cheap / normal / expensive) and its shape (when it is cheapest)
+right, not the exact øre in a given hour, and the error grows with every day of lead time.
 
-* You *can* get: the level of the day (cheap / normal / expensive), the shape of the day (when it
-  is cheapest), and whether negative prices are likely.
-* You *cannot* get: the exact øre/kWh in a given hour, price spikes when Germany is short, or the
-  effect of sudden outages.
-* Errors grow with lead time; at 6–7 days the guess is not much better than "like last week".
+Rather than building a forecaster, the site uses a public one and keeps score:
 
-Others already do this with heavier models, and the site shows one of them for comparison:
+* [elpriser.org/prognose](https://elpriser.org/prognose) – free, keyless API, quantile LightGBM on
+  weather forecasts, DK1/DK2, 2–9 days, retrained daily (model card: `Elpriser/denmark-price-forecast`
+  on Hugging Face). **Used by this site.** Best-effort uptime, no SLA.
+* [Carnot.dk](https://www.carnot.dk/) – 5 days, API key required. Could be added to the sync job
+  with the key stored as a repository secret.
+* [energypriceforecast.eu](https://energypriceforecast.eu/) – 5 days, DK1/DK2.
 
-* [elpriser.org/prognose](https://elpriser.org/prognose) – free, quantile LightGBM, DK1/DK2, 2–9 days, retrained daily
-  (open model card on Hugging Face: `Elpriser/denmark-price-forecast`)
-* [Carnot.dk](https://www.carnot.dk/) – 5 days, API key required (Home Assistant integration exists)
-* [energypriceforecast.eu](https://energypriceforecast.eu/) – 5 days, DK1/DK2
-* [nordpool-predict-fi](https://github.com/vividfog/nordpool-predict-fi) – open-source Finnish equivalent (random forest on weather, nuclear, hydro, transmission)
-* Energi Danmark's weekly "Fokus" market letter – qualitative outlook
-
-### The model in the site (`js/model.js`)
-
-Trained in the browser every time the page loads:
-
-* **Target:** hourly day-ahead price (øre/kWh) for the chosen area, last 42 days.
-* **Features:** wind capacity factor (own area, other DK area, northern Germany) from 100 m wind
-  speed through a generic fleet power curve; solar radiation; temperature; hour of day; weekend/
-  holiday × time-of-day block.
-* **Model:** ridge regression with hinge (piecewise-linear) wind terms, blended 50/50 with an
-  inverse-distance-weighted 12-nearest-neighbour estimate ("analog hours").
-* **Why only 42 days:** the price *level* set by gas/CO₂/hydro changes slowly; training on recent
-  data lets the model inherit the current regime without modelling those drivers.
-* **Self-check:** before the final fit the model is trained on the first 35 days and tested on the
-  last 7, and the page shows its MAE against two naive baselines (same hour of the last known
-  day; same hour one week earlier). Note that this test uses the weather that *actually occurred*
-  (Open-Meteo's short-range data), so it is an upper bound on multi-day skill.
-* **Uncertainty band:** holdout residual spread, widened 15 % per day of lead – indicative only.
-
-### The real backtest (`analysis/backtest.py`)
-
-Measures honest multi-day skill by using the weather forecasts that were *issued* 2–7 days
-before each target day (Open-Meteo Previous Runs API), with one LightGBM model per lead time and
-a rolling forecast origin over the last N days:
-
-```bash
-cd analysis
-pip install -r requirements.txt
-python backtest.py                      # DK1 + DK2, 60 forecast origins, leads 2..7 days
-python backtest.py --areas DK1 --eval-days 30 --archive-days 0
-python backtest.py --synthetic          # offline smoke test with fake data (no network)
-```
-
-Outputs `results/summary.md` (MAE per lead vs. persistence and "same weekday last week",
-plus a "perfect weather" variant that isolates the weather-forecast error), `predictions.csv`
-and `mae_by_lead.png`.
-
-The script was validated end-to-end on synthetic data; it has not yet been run against the live
-APIs from the environment this repository was created in (outbound network was restricted), so
-the first real run may surface API quirks – please report them.
-
-## Known limitations / to do
-
-* The grid-company charge-code table needs occasional maintenance when companies rename codes.
-  If your company is missing, add a line to `GRID_COMPANIES` in `js/tariffs.js` (find your GLN on
-  eloverblik.dk).
-* Energinet's 2026 tariff reform splits the transmission tariff for *TSO-connected* consumers into
-  a capacity part and a spot-dependent loss part; households still see a per-kWh figure through
-  `DatahubPricelist`, which is what the site uses. Fallback constants are approximate.
-* The page shows 15-minute prices as hourly averages.
-* Open-Meteo's free tier is generous but each page load costs ~17 location-requests; fine for
-  personal use, not for a high-traffic site.
+The scoreboard in `data/skill.json` (shown on the page under "Hvor godt rammer prognosen?") is
+the empirical answer to the question, and it gets better the longer the sync runs.
 
 ## Offline test
 
-`test/page_test.mjs` serves the site locally and replaces every external API with synthetic
-data (Playwright route interception), so the whole page – including the model – can be
-exercised without network access:
-
 ```bash
 npm install --no-save playwright chart.js && npx playwright install chromium
-node test/page_test.mjs            # scenario "ok"
-node test/page_test.mjs eds-down   # Energi Data Service unreachable → elpriser.org fallback
-node test/page_test.mjs all-down   # everything unreachable → error notices, no crashes
+node test/page_test.mjs            # synthetic data from scripts/sync.py --mock
+node test/page_test.mjs no-data    # no data files at all → graceful notices
 ```
+
+## Known limitations
+
+* The grid-company charge-code table needs occasional maintenance when companies rename codes.
+  If your company is missing, add it to `config/grid-companies.json` (find your GLN on eloverblik.dk).
+* 15-minute prices are shown as hourly averages.
+* The sync script was validated with synthetic payloads in the real APIs' shapes; the first live
+  run is the real test – see the job log and `data/meta.json`.

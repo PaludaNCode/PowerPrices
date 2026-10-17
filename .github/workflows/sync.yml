@@ -1,0 +1,58 @@
+name: Sync data and deploy site
+
+on:
+  schedule:
+    # UTC. Tomorrow's prices are published ~13:00 Danish time (11:00 UTC in summer, 12:00 UTC in winter),
+    # so run at 11:20, 12:20 and 13:20 UTC with retries, plus a morning and an evening run for the forecast.
+    - cron: "20 4,11,12,13,15,19 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main, master, claude/elpriser-site]
+    paths-ignore: ["data/**"]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: sync-and-deploy
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch prices, tariffs and forecast
+        run: python scripts/sync.py
+      - name: Commit data if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "data: sync $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+      - name: Show sync status
+        run: cat data/meta.json
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+  deploy:
+    needs: sync
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

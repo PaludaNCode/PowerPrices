@@ -5,44 +5,9 @@
 //
 //   total = (spot + grid tariff + Energinet tariffs + elafgift) * 1.25 (VAT) + supplier markup
 //
-// Grid tariffs and Energinet charges are fetched live from Energi Data Service's
-// "DatahubPricelist" dataset. The table below maps each Danish grid company
-// (netselskab) to its GLN number and the charge-type codes used for ordinary
-// household ("C-kunde") tariffs. The table is adapted from the MTrab/energidataservice
-// Home Assistant integration and may need updating when companies rename codes.
-
-export const GRID_COMPANIES = [
-  { name: "Radius Elnet A/S", gln: "5790000705689", codes: ["DT_C_01"] },
-  { name: "RAH Net A/S", gln: "5790000681327", codes: ["RAH-C"] },
-  { name: "Konstant Net A/S", gln: "5790000704842", codes: ["C_FBTNTR_B", "C_FBTNTR_R"] },
-  { name: "Cerius A/S", gln: "5790000705184", codes: ["30TR_C_ET"] },
-  { name: "N1 A/S", gln: "5790001089030", codes: ["CD", "CD R"] },
-  // Dinel has two customer classes; "<100" is consumption below 100,000 kWh/year (households).
-  { name: "Dinel A/S", gln: "5790000610099", codes: ["TCL<100_52"] },
-  { name: "TREFOR El-net A/S", gln: "5790000392261", codes: ["C"] },
-  { name: "TREFOR El-net Øst A/S", gln: "5790000706686", codes: ["46"] },
-  { name: "Elektrus A/S", gln: "5790000836239", codes: ["6000091"] },
-  { name: "Elnet Midt A/S", gln: "5790001100520", codes: ["T3001"] },
-  { name: "Hurup Elværk Net A/S", gln: "5790000610839", codes: ["HEV-NT-01T"] },
-  { name: "Veksel A/S", gln: "5790001088217", codes: ["NT-10"] },
-  { name: "Vores Elnet A/S", gln: "5790000610976", codes: ["TNT1009"] },
-  { name: "Netselskabet Elværk A/S", gln: "5790000681358", codes: ["5NCFF"] },
-  { name: "Nord Energi Net A/S", gln: "5790000610877", codes: ["TAC"] },
-  { name: "NOE Net A/S", gln: "5790000395620", codes: ["30030"] },
-  { name: "Ikast El Net A/S", gln: "5790000682102", codes: ["IEV-NT-01"] },
-  { name: "FLOW Elnet A/S", gln: "5790000392551", codes: ["FE1 NT-01"] },
-  { name: "Elinord A/S", gln: "5790001095277", codes: ["43300"] },
-  { name: "Hammel Elforsyning Net A/S", gln: "5790001090166", codes: ["C-Tarif"] },
-  { name: "El-net Kongerslev A/S", gln: "5790002502699", codes: ["C-Tarif"] },
-  { name: "Ravdex A/S", gln: "5790000836727", codes: ["NT-C"] },
-  { name: "Tarm Elværk Net A/S", gln: "5790000706419", codes: ["TEV-NT-01T", "TEV-NT-01R"] },
-  { name: "Zeanet A/S", gln: "5790001089375", codes: ["43110"] },
-  { name: "L-Net A/S", gln: "5790001090111", codes: ["3000"] },
-  { name: "Midtfyns Elforsyning A.m.b.A", gln: "5790001089023", codes: ["TNT15000"] },
-  { name: "Sunds Net A.m.b.A", gln: "5790001095444", codes: ["SEF-NT-05", "SEF-NT-05R"] },
-  { name: "Aal El-Net A.m.b.A", gln: "5790001095451", codes: ["AAL-NT-05", "AAL-NTR05"] },
-  { name: "Forsyning Elnet A/S", gln: "5790001088309", codes: ["STR-NT-03"] },
-];
+// Grid tariffs and Energinet charges come from Energi Data Service's "DatahubPricelist"
+// dataset via data/tariffs.json (written by scripts/sync.py). The grid-company table
+// (GLN + charge codes) lives in config/grid-companies.json.
 
 // Energinet's charges as they appear in DatahubPricelist.
 //   40000  Transmissions nettarif   (Energinet Systemansvar A/S, GLN 5790000432752)
