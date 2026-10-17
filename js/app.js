@@ -107,12 +107,12 @@ function renderStatus() {
   if (!m) { el.textContent = "Ingen synkroniserede data endnu."; notice($("global-notice"), "warn", globalThis.Chart ? "" : "Diagrambiblioteket (Chart.js) kunne ikke hentes – tal vises uden grafer."); return; }
   const t = Date.parse(m.synced_at);
   const ageH = (Date.now() - t) / HOUR;
-  let txt = `Data synkroniseret ${dateTimeFmt.format(new Date(t))}`;
+  let txt = `Data opdateret ${dateTimeFmt.format(new Date(t))}`;
   if (m.mock) txt += " (testdata)";
   el.textContent = txt;
   const problems = [];
   if (!globalThis.Chart) problems.push("Diagrambiblioteket (Chart.js) kunne ikke hentes – tal vises uden grafer.");
-  if (ageH > 26) problems.push(`Data er ${nf0.format(ageH)} timer gamle – synkroniseringen (GitHub Actions) ser ud til at have stået stille.`);
+  if (ageH > 26) problems.push(`Der er ikke kommet nye data i ${nf0.format(ageH)} timer – synkroniseringen (GitHub Actions) ser ud til at have stået stille.`);
   if (m.errors?.length) problems.push(`Seneste synkronisering fejlede delvist: ${m.errors.map((e) => e.split(":")[0]).join(", ")}.`);
   notice($("global-notice"), "warn", problems.join("<br>"));
 }

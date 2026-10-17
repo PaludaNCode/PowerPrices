@@ -188,9 +188,20 @@ def fetch_forecast(area: str) -> list[dict]:
 
 
 # ----------------------------------------------------------------------------- archive & evaluation
-def write_json(path: Path, obj) -> None:
+VOLATILE_KEYS = ("updated", "synced_at")
+
+
+def write_json(path: Path, obj) -> bool:
+    """Write only if the content changed, ignoring timestamp-only differences, so that the
+    GitHub Actions job commits (and redeploys) only when there is actually new data."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    old = read_json(path)
+    if isinstance(old, dict) and isinstance(obj, dict):
+        strip = lambda d: {k: v for k, v in d.items() if k not in VOLATILE_KEYS}  # noqa: E731
+        if strip(old) == strip(obj):
+            return False
     path.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n", encoding="utf-8")
+    return True
 
 
 def read_json(path: Path, default=None):
@@ -367,9 +378,9 @@ def main() -> int:
     prices = step("prices", lambda: fetch_prices(today - timedelta(days=PRICE_HISTORY_DAYS), today + timedelta(days=2)))
     if prices:
         has_tomorrow = any(local_date(datetime.strptime(r["t"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)) > today for r in prices["DK1"])
-        write_json(out / "prices.json", {"updated": iso_utc(now), "source": "Energi Data Service, DayAheadPrices (15 min -> hourly mean)", "unit": "DKK/MWh", "has_tomorrow": has_tomorrow, "areas": prices})
+        changed = write_json(out / "prices.json", {"updated": iso_utc(now), "source": "Energi Data Service, DayAheadPrices (15 min -> hourly mean)", "unit": "DKK/MWh", "has_tomorrow": has_tomorrow, "areas": prices})
         n = archive_prices(out, prices)
-        print(f"     archived {n} complete days; tomorrow published: {has_tomorrow}")
+        print(f"     {'new prices' if changed else 'prices unchanged'}; archived {n} complete days; tomorrow published: {has_tomorrow}")
 
     tariffs = step("tariffs", lambda: fetch_tariffs(companies, today))
     if tariffs:
@@ -378,15 +389,17 @@ def main() -> int:
     forecast = step("forecast", lambda: {a: fetch_forecast(a) for a in AREAS})
     if forecast:
         doc = {"updated": iso_utc(now), "date": today.isoformat(), "source": "elpriser.org (quantile LightGBM, retrained daily)", "unit": "DKK/MWh", "areas": forecast}
-        write_json(out / "forecast.json", doc)
+        changed = write_json(out / "forecast.json", doc)
         write_json(out / "history" / "forecasts" / f"{today.isoformat()}.json", doc)
+        print(f"     {'new forecast' if changed else 'forecast unchanged'}")
 
     skill = step("skill", lambda: evaluate(out, today))
     if skill:
         write_json(out / "skill.json", skill)
         print(f"     skill rows: {len(skill['summary'])}")
 
-    write_json(out / "meta.json", meta)
+    if write_json(out / "meta.json", meta):
+        print("     meta.json updated (status changed)")
     if not meta["ok"].get("prices"):
         return 1  # prices are the one thing the page cannot do without
     return 0
