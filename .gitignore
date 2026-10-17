@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 analysis/results/
 __pycache__/
 *.pyc
