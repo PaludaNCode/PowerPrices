@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Elpriser DK</title>
+  <meta name="description" content="Spotpriser for el i Danmark (DK1/DK2) i dag og i morgen, samt et vejrbaseret gæt 2–7 dage frem og en forklaring af hvordan prisen fastsættes.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Elpriser i Danmark</h1>
+      <div class="tag">Spotpris (day-ahead) for DK1 · Vestdanmark og DK2 · Østdanmark – i dag, i morgen og et kig længere frem</div>
+    </div>
+    <div class="tag" id="clock"></div>
+  </header>
+
+  <!-- ====================== I DAG OG I MORGEN ====================== -->
+  <section class="card" id="prices-card">
+    <h2>I dag og i morgen <span class="sub" id="prices-sub">henter priser…</span></h2>
+    <div class="controls">
+      <div class="seg" id="area-seg" role="group" aria-label="Prisområde">
+        <button type="button" data-area="DK1" aria-pressed="true">DK1 · Vest</button>
+        <button type="button" data-area="DK2" aria-pressed="false">DK2 · Øst</button>
+      </div>
+      <label><input type="checkbox" id="incl-all"> Vis pris inkl. tariffer, afgift og moms</label>
+      <label>Netselskab <select id="grid-select"></select></label>
+      <label>Eltillæg <input type="number" id="markup" step="0.1" min="0" value="0"> øre/kWh inkl. moms</label>
+    </div>
+    <div id="prices-notice"></div>
+    <div class="chart-wrap"><canvas id="prices-chart" aria-label="Timepriser i dag og i morgen" role="img"></canvas></div>
+    <div class="stats" id="prices-stats"></div>
+    <div class="legend-note" id="prices-source"></div>
+    <details id="composition">
+      <summary>Sådan er prisen sammensat i den aktuelle time</summary>
+      <div id="composition-body" class="table-scroll"></div>
+    </details>
+  </section>
+
+  <!-- ====================== UDSIGT ====================== -->
+  <section class="card" id="outlook-card">
+    <h2>Udsigt 2–7 dage frem <span class="sub">eksperiment: et vejrbaseret gæt – ikke en officiel pris</span></h2>
+    <p class="muted">Morgendagens pris kendes først kl. ca. 13:00, og ingen kender priserne længere frem. Men prisniveauet de næste dage afhænger først og fremmest af <strong>vind og sol</strong>, og dem kan vejrmodellerne forudsige nogenlunde 3–5 dage frem. Modellen her lærer sammenhængen mellem vejr og pris af de seneste 6 ugers faktiske priser og anvender den på vejrudsigten.</p>
+    <div id="outlook-notice"><span class="skeleton">Henter 6 ugers prishistorik og vejrudsigt…</span></div>
+    <div class="chart-wrap"><canvas id="outlook-chart" aria-label="Prisudsigt" role="img"></canvas></div>
+    <div class="legend-note">Fuldt optrukket = kendte day-ahead-priser. Grå stiplet = modellens gæt for de seneste 7 dage (lavet uden at kende priserne, så du kan se hvor godt den rammer). Grøn = modellens gæt frem i tiden med et vejledende usikkerhedsbånd. Lilla prikket = ekstern prognose fra elpriser.org, hvis tilgængelig.</div>
+    <div class="table-scroll"><table id="outlook-table"></table></div>
+    <details>
+      <summary>Hvor godt rammer modellen? (test på de seneste 7 dage)</summary>
+      <div id="outlook-eval" class="prose"></div>
+    </details>
+    <details>
+      <summary>Sådan virker modellen</summary>
+      <div class="prose">
+        <ul>
+          <li><strong>Vejrdata:</strong> timeprognoser for vindhastighed i 100 m højde, solindstråling og temperatur fra <a href="https://open-meteo.com/" rel="noopener">Open-Meteo</a> for 17 punkter i Jylland/Fyn, på Sjælland/øerne, til havs (Horns Rev, Anholt, Kriegers Flak, Rødsand) og i Nordtyskland. Vindhastighed omregnes til en typisk kapacitetsfaktor for vindmøller.</li>
+          <li><strong>Træning:</strong> de seneste 42 dages faktiske day-ahead-priser (Energi Data Service) kobles time for time med vejret. Modellen er en ridge-regression med knæk-led for vind (så prisen falder stejlt når det blæser meget) kombineret 50/50 med et "analoge timer"-gæt (gennemsnittet af de 12 mest vejr- og tidsmæssigt lignende timer i træningsperioden). Timeprofil, weekend/helligdag og temperatur indgår.</li>
+          <li><strong>Hvorfor kun 6 uger?</strong> Gas- og CO2-priser, vandmagasiner og revisioner på kabler og kraftværker flytter prisniveauet, men de ændrer sig langsomt. Ved kun at træne på de seneste uger "arver" modellen det aktuelle niveau uden at skulle kende dem.</li>
+          <li><strong>Usikkerhed:</strong> båndet er modellens fejlspredning på de seneste 7 dage, forstørret 15 % pr. dag længere frem, fordi vejrudsigten selv bliver mere usikker. Det er vejledende, ikke statistisk garanteret.</li>
+          <li><strong>Hvad den ikke kan:</strong> udfald på kabler og kraftværker, pludselige gasprisspring, ekstreme prisspidser og flaskehalse mellem DK1 og DK2. En rigtig backtest med vejrudsigter udsendt 1–5 dage i forvejen ligger i repoets <code>analysis/backtest.py</code>.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <!-- ====================== FORKLARING ====================== -->
+  <section class="card prose" id="explainer">
+    <h2>Hvordan fastsættes elprisen?</h2>
+    <p>Den spotpris, Norlys og andre viser for "i morgen", er resultatet af <strong>day-ahead-auktionen</strong> på elbørsen Nord Pool, som er koblet sammen med resten af Europas børser (EPEX m.fl.) i den fælles europæiske priskobling, SDAC. Sådan foregår det:</p>
+    <ol>
+      <li>Hver dag inden <strong>kl. 12:00</strong> (gate closure) sender producenter, store forbrugere og handlere købs- og salgsbud for hvert af de 96 kvarter i <em>det kommende døgn</em>. Siden 1. oktober 2025 afregnes der i 15-minutters intervaller; før var det timer.</li>
+      <li>Algoritmen (Euphemia) finder for hvert kvarter og hvert budområde den pris, hvor udbud og efterspørgsel mødes, under hensyn til hvor meget strøm der kan flyde på kablerne mellem områderne.</li>
+      <li>Resultatet offentliggøres normalt <strong>kl. ca. 12:45–13:00</strong>. Derfor kan ingen vise i morgens pris før det – og ingen kan vise prisen for i overmorgen, for auktionen er ikke kørt endnu.</li>
+    </ol>
+    <p>Prisen i hvert kvarter er en <strong>marginalpris</strong>: alle producenter, der leverer, får samme pris, nemlig buddet fra det dyreste værk, der er nødvendigt for at dække forbruget. Rækkefølgen af bud kaldes <em>merit order</em>: vind, sol og kernekraft byder tæt på nul (de har ingen brændselsomkostninger), vandkraft byder "værdien af at gemme vandet til senere", og kul- og gasværker byder deres brændsels- og CO2-omkostninger og ligger øverst. Blæser det meget, dækkes forbruget af de billige bud, og prisen bliver lav (nogle gange negativ, fordi vindmøller med støtte hellere vil producere end stoppe). Er det vindstille, er det gasværkerne – ofte i Tyskland – der sætter prisen.</p>
+    <p>Danmark består af to budområder: <strong>DK1</strong> (Jylland og Fyn) og <strong>DK2</strong> (Sjælland og øerne øst for Storebælt). Begge er forbundet til Tyskland, Norge, Sverige, Holland og Storbritannien. Når kablerne ikke er fyldt op, bliver prisen den samme på begge sider; i praksis følger DK1 ofte den tyske pris og DK2 ofte den sydsvenske (SE4). Når et kabel er fuldt (flaskehals), skilles priserne, og DK1 og DK2 kan afvige fra hinanden.</p>
+
+    <h3>Hvad afgør så, om prisen bliver høj eller lav?</h3>
+    <ul>
+      <li><strong>Vind i Danmark og Nordtyskland</strong> – den vigtigste faktor fra dag til dag. Vindstille over Nordeuropa ("dunkelflaute") giver dyre dage; blæsevejr giver billige eller negative priser.</li>
+      <li><strong>Sol</strong> – trykker middagspriserne ned fra marts til september, især i weekender hvor forbruget er lavt.</li>
+      <li><strong>Forbrug</strong> – døgnprofil (dyrest kl. 17–20, billigst om natten), hverdag/weekend/helligdag, og temperatur (elvarme og varmepumper om vinteren).</li>
+      <li><strong>Gas- og CO2-kvotepriser</strong> – bestemmer, hvor højt prisen går i vindstille timer. De ændrer sig over uger og måneder, ikke fra dag til dag.</li>
+      <li><strong>Vandkraft i Norge og Sverige</strong> – fyldningsgraden i magasinerne afgør, hvor billigt Norden kan eksportere; tørår giver dyrere vintre.</li>
+      <li><strong>Udlandsforbindelser og kraftværker ude af drift</strong> – planlagte revisioner og udfald (meldes som "urgent market messages") skaber flaskehalse og lokale prisudsving.</li>
+    </ul>
+
+    <h3>Kan man gætte prisen 2–5 dage frem?</h3>
+    <p><strong>Delvist, ja.</strong> Alt det "langsomme" (gas, CO2, vand, revisioner) kan man antage uændret et par dage frem. Så er spørgsmålet i praksis <em>vejrudsigten</em>: vindprognoser er gode 1–3 dage frem og brugbare op til 5–6 dage; derefter er det statistik. Det betyder:</p>
+    <ul>
+      <li><strong>Man kan ramme:</strong> prisniveauet (billig/normal/dyr dag), døgnprofilen (hvornår på dagen det er billigst) og om der sandsynligvis kommer negative priser.</li>
+      <li><strong>Man kan ikke ramme:</strong> den præcise pris i den enkelte time, prisspidser når Tyskland mangler strøm, og konsekvenser af pludselige udfald.</li>
+      <li><strong>Jo længere frem, jo værre:</strong> fejlen vokser dag for dag, og 6–7 dage frem er gættet ikke meget bedre end "som sidste uge".</li>
+    </ul>
+    <p>Andre har bygget det samme med mere avancerede modeller, så vi behøver ikke starte fra nul: <a href="https://elpriser.org/prognose" rel="noopener">elpriser.org</a> (gratis, LightGBM-model, 7–9 dage, genoptrænes dagligt – vises ovenfor som sammenligning), <a href="https://www.carnot.dk/" rel="noopener">Carnot.dk</a> (5 dage, kræver API-nøgle), <a href="https://energypriceforecast.eu/" rel="noopener">energypriceforecast.eu</a> (5 dage) og elhandlernes ugentlige markedskommentarer (fx Energi Danmarks "Fokus"). Fælles for dem alle: de bygger på vejrprognoser for vind og sol i Danmark og nabolandene plus kalender og de seneste priser.</p>
+
+    <h3>Hvad betaler man egentlig pr. kWh?</h3>
+    <p>Spotprisen er kun en del af regningen. For en husstand i 2026 består prisen af: <strong>spotpris</strong> (varierer time for time) + <strong>elhandlerens tillæg</strong> (fx Norlys FlexEl) + <strong>netselskabets nettarif</strong> (tidsdifferentieret: lav om natten, høj om dagen, spidsbelastning kl. 17–21, højest om vinteren) + <strong>Energinets tariffer</strong> (transmissionsnet- og systemtarif, i 2026 ca. 11,5 øre/kWh i alt) + <strong>elafgift</strong> (midlertidigt nedsat til 0,8 øre/kWh i 2026 og 2027 mod normalt ca. 72,7 øre/kWh) – og oveni 25 % moms. Slå "inkl. tariffer, afgift og moms" til øverst og vælg dit netselskab for at se det samlede beløb; tarifferne hentes live fra Energinets DataHub-prisliste.</p>
+  </section>
+
+  <footer>
+    <strong>Datakilder</strong>
+    <ul>
+      <li><a href="https://www.energidataservice.dk/tso-electricity/DayAheadPrices" rel="noopener">Energi Data Service – DayAheadPrices</a> (Energinet, CC BY 4.0): day-ahead-priser i 15-minutters opløsning. <a href="https://www.energidataservice.dk/tso-electricity/DatahubPricelist" rel="noopener">DatahubPricelist</a>: tariffer og afgifter.</li>
+      <li><a href="https://open-meteo.com/" rel="noopener">Open-Meteo</a> (CC BY 4.0): vejrprognoser.</li>
+      <li><a href="https://elpriser.org/" rel="noopener">elpriser.org</a>: ekstern prognose og reserve-kilde for priser, hvis Energi Data Service ikke kan nås fra browseren.</li>
+      <li><a href="https://www.nordpoolgroup.com/" rel="noopener">Nord Pool</a>: day-ahead-markedet, hvor priserne fastsættes.</li>
+    </ul>
+    <p>Siden er statisk og henter alt direkte i din browser; intet gemmes på en server. Prognosen er et eksperiment og ingen garanti. Tjek altid din egen elaftale for tillæg og abonnementer.</p>
+  </footer>
+</div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
