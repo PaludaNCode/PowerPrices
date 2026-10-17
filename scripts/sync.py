@@ -143,15 +143,19 @@ def fetch_tariffs(companies: list[dict], today: date) -> dict:
         except Exception as e:  # noqa: BLE001
             print(f"     [warn] {comp['name']}: configured codes {comp['codes']} returned nothing and fallback lookup failed: {e}", flush=True)
             continue
-        seen = sorted({(r.get("ChargeTypeCode"), r.get("Note")) for r in js.get("records", [])})
-        for r in js.get("records", []):
-            note = (r.get("Note") or "").lower()
-            if r.get("ValidTo") and r["ValidTo"][:10] < cutoff:
-                continue
-            if "nettarif c" in note or note.startswith("nettarif"):
-                grid[comp["gln"]].append({k: r.get(k) for k in TARIFF_FIELDS})
-        print(f"     [warn] {comp['name']}: configured codes {comp['codes']} returned nothing; "
-              f"fallback used {len(grid[comp['gln']])} rows. Codes seen for this GLN: {seen}", flush=True)
+        current = [r for r in js.get("records", []) if not (r.get("ValidTo") and r["ValidTo"][:10] < cutoff)]
+        seen = sorted({(r.get("ChargeTypeCode"), r.get("Note")) for r in current})
+        # Household tariff notes look like "Nettarif C", "Nettarif C time", "Nettarif C time (Rabat)".
+        def is_c(note: str) -> bool:
+            n = note.lower().strip()
+            return n == "nettarif c" or n.startswith("nettarif c ") or n.startswith("nettarif c(")
+        candidates = {code: note for code, note in seen if is_c(note or "")}
+        primary = [c for c, n in candidates.items() if "rabat" not in n.lower()]
+        primary.sort(key=lambda c: ("time" not in candidates[c].lower(), c))  # prefer the time-differentiated one
+        chosen = primary[:1] + [c for c, n in candidates.items() if "rabat" in n.lower()]
+        grid[comp["gln"]] = [{k: r.get(k) for k in TARIFF_FIELDS} for r in current if r.get("ChargeTypeCode") in chosen]
+        print(f"     [warn] {comp['name']}: configured codes {comp['codes']} returned nothing; fallback chose {chosen} "
+              f"({len(grid[comp['gln']])} rows). Update config/grid-companies.json. Codes seen: {seen}", flush=True)
     return {"energinet": energinet, "grid": grid}
 
 
