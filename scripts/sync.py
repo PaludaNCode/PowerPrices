@@ -119,6 +119,8 @@ def fetch_tariffs(companies: list[dict], today: date) -> dict:
     for r in js.get("records", []):
         if r.get("ValidTo") and r["ValidTo"][:10] < cutoff:
             continue  # expired
+        if r.get("ChargeType") != "D03":
+            continue  # D01 = subscription (kr/month), D02 = fee; only D03 tariffs are per kWh
         row = {k: r.get(k) for k in TARIFF_FIELDS}
         gln, code = str(r.get("GLN_Number")), r.get("ChargeTypeCode")
         if gln in ENERGINET_GLNS and code in energinet:
@@ -128,6 +130,28 @@ def fetch_tariffs(companies: list[dict], today: date) -> dict:
     missing = [c for c, rows in energinet.items() if not rows]
     if missing:
         raise RuntimeError(f"DatahubPricelist: no current rows for Energinet codes {missing}")
+    # Companies whose configured codes returned nothing (renamed codes): fall back to every
+    # per-kWh row of that GLN whose note looks like the household C tariff, and log what we saw.
+    for comp in companies:
+        if grid[comp["gln"]]:
+            continue
+        try:
+            js = get_json(f"{EDS}/DatahubPricelist", {
+                "filter": json.dumps({"GLN_Number": [comp["gln"]], "ChargeType": ["D03"]}),
+                "sort": "ValidFrom desc", "limit": 500,
+            })
+        except Exception as e:  # noqa: BLE001
+            print(f"     [warn] {comp['name']}: configured codes {comp['codes']} returned nothing and fallback lookup failed: {e}", flush=True)
+            continue
+        seen = sorted({(r.get("ChargeTypeCode"), r.get("Note")) for r in js.get("records", [])})
+        for r in js.get("records", []):
+            note = (r.get("Note") or "").lower()
+            if r.get("ValidTo") and r["ValidTo"][:10] < cutoff:
+                continue
+            if "nettarif c" in note or note.startswith("nettarif"):
+                grid[comp["gln"]].append({k: r.get(k) for k in TARIFF_FIELDS})
+        print(f"     [warn] {comp['name']}: configured codes {comp['codes']} returned nothing; "
+              f"fallback used {len(grid[comp['gln']])} rows. Codes seen for this GLN: {seen}", flush=True)
     return {"energinet": energinet, "grid": grid}
 
 

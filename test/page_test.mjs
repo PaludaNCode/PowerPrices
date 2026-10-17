@@ -1,7 +1,7 @@
 // Offline browser test of the site. Generates synthetic data with `scripts/sync.py --mock`,
 // serves the repo with that data, and checks the page in Chromium (Playwright).
 //   npm install --no-save playwright chart.js && npx playwright install chromium   (or set PW_CHROME)
-//   node test/page_test.mjs [ok|no-data]
+//   node test/page_test.mjs [ok|real|no-data]
 // Screenshots (shot_*.png) are written to the current directory.
 import { chromium } from "playwright";
 import { execFileSync } from "node:child_process";
@@ -12,7 +12,8 @@ import path from "node:path";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const scenario = process.argv[2] || "ok";
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "powerprices-data-"));
+// "real" serves the repository's own data/ (as synced by GitHub Actions) instead of synthetic data.
+const dataDir = scenario === "real" ? path.join(ROOT, "data") : fs.mkdtempSync(path.join(os.tmpdir(), "powerprices-data-"));
 if (scenario === "ok") {
   // Seed an archived forecast from 6 days ago so the skill table has something to show.
   const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Copenhagen", year: "numeric", month: "2-digit", day: "2-digit" });
@@ -89,5 +90,5 @@ console.log("page errors:", errors);
 console.log("console warnings/errors:", logs.slice(0, 8));
 await browser.close();
 server.close();
-fs.rmSync(dataDir, { recursive: true, force: true });
+if (scenario !== "real") fs.rmSync(dataDir, { recursive: true, force: true });
 process.exit(errors.length ? 1 : 0);
